@@ -67,6 +67,27 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
     w.Write([]byte(`{"status":"ok"}`))
 }
 
+func logRequest(r *http.Request) {
+    log.Printf("Received request: %s %s", r.Method, r.URL.Path)
+}
+
+// withCORS wraps a handler and adds very simple CORS headers so a static frontend
+// loaded from a different origin (e.g. file:// or another port) can call the API.
+func withCORS(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+        if r.Method == http.MethodOptions {
+            w.WriteHeader(http.StatusNoContent)
+            return
+        }
+
+        next.ServeHTTP(w, r)
+    })
+}
+
 func main() {
     userProxy := newReverseProxy(userServiceURL)
     catalogProxy := newReverseProxy(catalogServiceURL)
@@ -75,14 +96,20 @@ func main() {
 
     mux := http.NewServeMux()
     mux.HandleFunc("/api/login", loginHandler(userProxy))
-    mux.HandleFunc("/api/products", productsHandler(catalogProxy))
+    mux.HandleFunc("/api/products", func(w http.ResponseWriter, r *http.Request) {
+        logRequest(r)
+        productsHandler(catalogProxy)(w, r)
+    })
     mux.HandleFunc("/api/cart/", cartHandler(cartProxy))
     mux.HandleFunc("/api/order", orderHandler(orderProxy))
-    mux.HandleFunc("/health", healthHandler)
+    mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+        logRequest(r)
+        healthHandler(w, r)
+    })
 
     addr := ":8000"
     log.Println("api-gateway-go listening on", addr)
-    if err := http.ListenAndServe(addr, mux); err != nil {
+    if err := http.ListenAndServe(addr, withCORS(mux)); err != nil {
         log.Fatal(err)
     }
 }

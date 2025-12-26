@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  frontend-nodejs:
+    build: ./services/frontend-nodejs
+    container_name: frontend-nodejs
+    ports:
+      - "3000:3000"
+    environment:
+      # Point the frontend at the gateway inside the compose network
+      - API_BASE=http://api-gateway-go:8000/api
+    depends_on:
+      - api-gateway-go
+
+  api-gateway-go:
+    build: ./services/api-gateway-go
+    container_name: api-gateway-go
+    ports:
+      - "8000:8000"
+    depends_on:
+      - user-service-python
+      - catalog-service-go
+      - cart-service-python
+      - order-service-go
+
+  user-service-python:
+    build: ./services/user-service-python
+    container_name: user-service-python
+    ports:
+      - "8001:8001"
+
+  catalog-service-go:
+    build: ./services/catalog-service-go
+    container_name: catalog-service-go
+    ports:
+      - "8002:8002"
+
+  cart-service-python:
+    build: ./services/cart-service-python
+    container_name: cart-service-python
+    ports:
+      - "8003:8003"
+
+  payment-service-python:
+    build: ./services/payment-service-python
+    container_name: payment-service-python
+    ports:
+      - "8004:8004"
+
+  order-service-go:
+    build: ./services/order-service-go
+    container_name: order-service-go
+    ports:
+      - "8005:8005"
+    depends_on:
+      - cart-service-python
+      - payment-service-python
+
+# Default network: docker-compose will create a single bridge network
+# and each service will be addressable by its service name, e.g.
+#   http://user-service-python:8001
+#   http://catalog-service-go:8002
+#   http://cart-service-python:8003
+#   http://payment-service-python:8004
+#   http://order-service-go:8005

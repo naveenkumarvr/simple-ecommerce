@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Simple Ecommerce Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 16px; }
+    .hidden { display: none; }
+    .product { border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; }
+    .error { color: #c00; }
+    .success { color: #060; }
+    button { margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Simple Ecommerce Demo</h1>
+
+  <div id="login-view">
+    <h2>Login</h2>
+    <p>This demo accepts any username/password.</p>
+    <label>Username: <input id="username" /></label><br><br>
+    <label>Password: <input id="password" type="password" /></label><br><br>
+    <button id="login-btn">Login</button>
+    <div id="login-msg" class="error"></div>
+  </div>
+
+  <div id="home-view" class="hidden">
+    <h2>Products</h2>
+    <div id="products"></div>
+    <button id="goto-cart-btn">Go to Cart</button>
+    <div id="home-msg" class="error"></div>
+  </div>
+
+  <div id="cart-view" class="hidden">
+    <h2>Your Cart</h2>
+    <div id="cart-container"></div>
+    <button id="checkout-btn">Checkout</button>
+    <div id="cart-msg" class="error"></div>
+    <div id="checkout-msg" class="success"></div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:8000/api';
+    let currentUser = null;
+
+    function show(viewId) {
+      document.getElementById('login-view').classList.add('hidden');
+      document.getElementById('home-view').classList.add('hidden');
+      document.getElementById('cart-view').classList.add('hidden');
+      document.getElementById(viewId).classList.remove('hidden');
+    }
+
+    async function login() {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      currentUser = { username, user_id: 'demo-user' };
+
+      try {
+        const resp = await fetch(API_BASE + '/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          currentUser = data;
+        }
+      } catch (err) {
+        console.warn('Backend login failed, using demo user', err);
+      }
+
+      document.getElementById('login-msg').textContent = '';
+      await loadProducts();
+      show('home-view');
+    }
+
+    async function loadProducts() {
+      const msg = document.getElementById('home-msg');
+      msg.textContent = '';
+      const container = document.getElementById('products');
+      container.innerHTML = 'Loading...';
+
+      try {
+        const resp = await fetch(API_BASE + '/products');
+        if (!resp.ok) {
+          msg.textContent = 'Failed to load products';
+          return;
+        }
+        const products = await resp.json();
+        container.innerHTML = '';
+        products.forEach(p => {
+          const div = document.createElement('div');
+          div.className = 'product';
+          const name = p.name || p.id;
+          div.innerHTML = `
+            <strong>${name}</strong><br>
+            Price: $${p.price}<br>
+            <label>Qty: <input type="number" min="1" value="1" style="width:60px"></label>
+            <button>Add to cart</button>
+          `;
+          const qtyInput = div.querySelector('input');
+          const btn = div.querySelector('button');
+          btn.onclick = () => addToCart(p.id, parseInt(qtyInput.value, 10) || 1);
+          container.appendChild(div);
+        });
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Error contacting server';
+      }
+    }
+
+    async function addToCart(productId, quantity) {
+      const userId = (currentUser && currentUser.user_id) || 'demo-user';
+      const msg = document.getElementById('home-msg');
+      msg.textContent = '';
+      try {
+        for (let i = 0; i < quantity; i++) {
+          const resp = await fetch(API_BASE + '/cart/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, product_id: productId })
+          });
+          if (!resp.ok) {
+            msg.textContent = 'Failed to add to cart';
+            return;
+          }
+        }
+        msg.textContent = 'Added to cart';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Error contacting server';
+      }
+    }
+
+    async function loadCart() {
+      const userId = (currentUser && currentUser.user_id) || 'demo-user';
+      const msg = document.getElementById('cart-msg');
+      msg.textContent = '';
+      const container = document.getElementById('cart-container');
+      container.innerHTML = 'Loading...';
+
+      try {
+        const resp = await fetch(API_BASE + '/cart/' + encodeURIComponent(userId));
+        if (!resp.ok) {
+          msg.textContent = 'Failed to load cart';
+          return;
+        }
+        const data = await resp.json();
+        const items = data.items || [];
+        if (!items.length) {
+          container.textContent = 'Cart is empty';
+          return;
+        }
+        let html = '<ul>';
+        items.forEach(it => {
+          html += `<li>${it.product_id} x ${it.quantity}</li>`;
+        });
+        html += '</ul>';
+        container.innerHTML = html;
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Error contacting server';
+      }
+    }
+
+    async function checkout() {
+      const userId = (currentUser && currentUser.user_id) || 'demo-user';
+      const msg = document.getElementById('checkout-msg');
+      const errMsg = document.getElementById('cart-msg');
+      msg.textContent = '';
+      errMsg.textContent = '';
+
+      try {
+        const resp = await fetch(API_BASE + '/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId })
+        });
+        if (!resp.ok) {
+          errMsg.textContent = 'Checkout failed';
+          return;
+        }
+        const data = await resp.json();
+        msg.textContent = 'Order successful! Payment ID: ' + (data.payment_id || 'n/a');
+      } catch (err) {
+        console.error(err);
+        errMsg.textContent = 'Error contacting server';
+      }
+    }
+
+    document.getElementById('login-btn').onclick = login;
+    document.getElementById('goto-cart-btn').onclick = async () => {
+      await loadCart();
+      show('cart-view');
+    };
+    document.getElementById('checkout-btn').onclick = checkout;
+  </script>
+</body>
+</html>

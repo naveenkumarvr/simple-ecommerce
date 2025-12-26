@@ -1,0 +1,12 @@
+{
+  "name": "frontend-nodejs",
+  "version": "1.0.0",
+  "description": "Very simple ecommerce frontend for Kubernetes demo",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
