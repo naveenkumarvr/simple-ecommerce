@@ -41,12 +41,13 @@ app.get('/session', (req, res) => {
   res.json(null);
 });
 
-// POST /login - accept any credentials, call backend /api/login, store user in session
+// POST /login - call backend /api/login, store user in session only on success
 app.post('/login', async (req, res) => {
   const { username, password } = req.body || {};
 
-  // Fallback user if backend is unavailable
-  let user = { username: username || 'guest', user_id: 'demo-user' };
+  if (!username || !password) {
+    return res.status(400).json({ error: 'username and password are required' });
+  }
 
   try {
     const resp = await fetch(`${API_BASE}/login`, {
@@ -55,19 +56,32 @@ app.post('/login', async (req, res) => {
       body: JSON.stringify({ username, password }),
     });
 
-    if (resp.ok) {
-      const data = await resp.json();
-      user = {
-        username: data.username || username || 'guest',
-        user_id: data.user_id || data.id || 'demo-user',
-      };
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.warn('Backend login failed with status', resp.status, text);
+      return res.status(401).json({ error: 'Invalid credentials or login failed' });
     }
-  } catch (err) {
-    console.warn('Backend login failed, using demo user:', err.message);
-  }
 
-  req.session.user = user;
-  res.json(user);
+    const data = await resp.json();
+
+    // Expect backend to return at least a user identifier; if not, treat as failure
+    const userId = data.user_id || data.id;
+    if (!userId) {
+      console.warn('Backend login did not return a user_id/id field');
+      return res.status(401).json({ error: 'Invalid login response from user service' });
+    }
+
+    const user = {
+      username: data.username || username,
+      user_id: userId,
+    };
+
+    req.session.user = user;
+    res.json(user);
+  } catch (err) {
+    console.error('Error calling backend /login:', err);
+    res.status(500).json({ error: 'Error contacting user service' });
+  }
 });
 
 // POST /add-to-cart - body: { product_id }
@@ -163,8 +177,8 @@ app.post('/checkout', requireSessionUser, async (req, res) => {
 app.get('/orders-data', requireSessionUser, async (req, res) => {
   const user = req.session.user;
   try {
-    // Assuming API gateway exposes GET /api/orders?user_id={user_id}
-    const url = `${API_BASE}/orders?user_id=${encodeURIComponent(user.user_id)}`;
+    // Now call GET /api/order/{user_id} via gateway
+    const url = `${API_BASE}/order/${encodeURIComponent(user.user_id)}`;
     const resp = await fetch(url);
 
     if (!resp.ok) {

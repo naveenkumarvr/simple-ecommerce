@@ -5,7 +5,12 @@ import (
     "encoding/json"
     "io"
     "log"
+    "math/rand"
     "net/http"
+    "strconv"
+    "strings"
+    "sync"
+    "time"
 )
 
 const (
@@ -37,6 +42,27 @@ type paymentRequest struct {
 type paymentResponse struct {
     PaymentID string `json:"payment_id"`
     Status    string `json:"status"`
+}
+
+// Order represents a very simple in-memory order record.
+type Order struct {
+    OrderID   string     `json:"order_id"`
+    UserID    string     `json:"user_id"`
+    Items     []cartItem `json:"items"`
+    Total     float64    `json:"total"`
+    PaymentID string     `json:"payment_id"`
+    Status    string     `json:"status"`
+    CreatedAt time.Time  `json:"created_at"`
+}
+
+// In-memory store: user_id -> list of orders.
+var (
+    ordersMu    sync.Mutex
+    ordersByUser = make(map[string][]Order)
+)
+
+func init() {
+    rand.Seed(time.Now().UnixNano())
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
@@ -99,6 +125,25 @@ func callPayment(userID string, amount float64) (*paymentResponse, error) {
     return &pr, nil
 }
 
+// generateOrderID creates a simple pseudo-unique order ID for demo purposes.
+func generateOrderID() string {
+    return "order-" + strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + strconv.Itoa(rand.Intn(1000))
+}
+
+// storeOrder appends an order for the given user into the in-memory store.
+func storeOrder(o Order) {
+    ordersMu.Lock()
+    defer ordersMu.Unlock()
+    ordersByUser[o.UserID] = append(ordersByUser[o.UserID], o)
+}
+
+// getOrdersForUser returns all orders for a given user.
+func getOrdersForUser(userID string) []Order {
+    ordersMu.Lock()
+    defer ordersMu.Unlock()
+    return append([]Order(nil), ordersByUser[userID]...)
+}
+
 func checkoutHandler(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodPost {
         w.WriteHeader(http.StatusMethodNotAllowed)
@@ -143,8 +188,49 @@ func checkoutHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // 4) Return simple success response
-    writeJSON(w, http.StatusOK, map[string]string{"message": "order successful", "payment_id": payment.PaymentID})
+    // 4) Build and store order record in memory
+    order := Order{
+        OrderID:   generateOrderID(),
+        UserID:    req.UserID,
+        Items:     cart.Items,
+        Total:     total,
+        PaymentID: payment.PaymentID,
+        Status:    "completed",
+        CreatedAt: time.Now().UTC(),
+    }
+    storeOrder(order)
+
+    // 5) Return success response including order details
+    writeJSON(w, http.StatusOK, map[string]interface{}{
+        "message":    "order successful",
+        "payment_id": payment.PaymentID,
+        "order_id":   order.OrderID,
+        "total":      order.Total,
+    })
+}
+
+// getOrdersHandler returns all orders for a given user.
+// URL pattern: /order/{user_id}
+func getOrdersHandler(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodGet {
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        return
+    }
+
+    // Expect path like /order/{user_id}
+    path := r.URL.Path
+    if !strings.HasPrefix(path, "/order/") {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid path"})
+        return
+    }
+    userID := strings.TrimPrefix(path, "/order/")
+    if userID == "" {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id required"})
+        return
+    }
+
+    orders := getOrdersForUser(userID)
+    writeJSON(w, http.StatusOK, orders)
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +244,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
     mux := http.NewServeMux()
     mux.HandleFunc("/order/checkout", checkoutHandler)
+    mux.HandleFunc("/order/", getOrdersHandler) // GET /order/{user_id}
     mux.HandleFunc("/health", healthHandler)
 
     addr := ":8005"

@@ -50,10 +50,23 @@ func cartHandler(proxy *httputil.ReverseProxy) http.HandlerFunc {
     }
 }
 
-func orderHandler(proxy *httputil.ReverseProxy) http.HandlerFunc {
+// orderCheckoutHandler handles POST /api/order -> /order/checkout
+func orderCheckoutHandler(proxy *httputil.ReverseProxy) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         // /api/order -> order-service /order/checkout
         r.URL.Path = "/order/checkout"
+        proxy.ServeHTTP(w, r)
+    }
+}
+
+// orderGetHandler handles GET /api/order/{user_id} -> /order/{user_id}
+func orderGetHandler(proxy *httputil.ReverseProxy) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        // Expect path like /api/order/{user_id}
+        if strings.HasPrefix(r.URL.Path, "/api") {
+            r.URL.Path = strings.TrimPrefix(r.URL.Path, "/api")
+        }
+        // Now path is /order/{user_id}, which order-service understands
         proxy.ServeHTTP(w, r)
     }
 }
@@ -101,7 +114,24 @@ func main() {
         productsHandler(catalogProxy)(w, r)
     })
     mux.HandleFunc("/api/cart/", cartHandler(cartProxy))
-    mux.HandleFunc("/api/order", orderHandler(orderProxy))
+
+    // Order routes:
+    // POST /api/order -> /order/checkout
+    // GET  /api/order/{user_id} -> /order/{user_id}
+    mux.HandleFunc("/api/order", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method == http.MethodPost {
+            orderCheckoutHandler(orderProxy)(w, r)
+            return
+        }
+        if r.Method == http.MethodGet {
+            // Optional: could return 405 or some summary; for now, 405
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            return
+        }
+        w.WriteHeader(http.StatusMethodNotAllowed)
+    })
+    mux.HandleFunc("/api/order/", orderGetHandler(orderProxy))
+
     mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
         logRequest(r)
         healthHandler(w, r)

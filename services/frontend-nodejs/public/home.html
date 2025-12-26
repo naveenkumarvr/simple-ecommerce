@@ -7,16 +7,22 @@
     body { font-family: Arial, sans-serif; padding: 16px; }
     .product { border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; }
     .error { color: #c00; }
+    .nav { margin-bottom: 12px; }
+    .nav a { margin-right: 12px; }
   </style>
 </head>
 <body>
   <h1>Home</h1>
   <div id="userInfo"></div>
 
+  <div class="nav">
+    <a href="/cart.html">Go to Cart</a>
+    <a href="/orders.html">My Orders</a>
+  </div>
+
   <h2>Products</h2>
   <div id="products"></div>
 
-  <p><a href="/cart.html">Go to Cart</a></p>
   <div id="message" class="error"></div>
 
   <script>
