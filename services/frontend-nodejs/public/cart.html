@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cart - Simple Ecommerce</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; }
+    .error { color: #c00; }
+    .total { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Cart</h1>
+  <div id="userInfo"></div>
+
+  <div id="cartContainer"></div>
+  <p class="total" id="totalPrice"></p>
+
+  <p><a href="/checkout.html">Go to Checkout</a></p>
+  <p><a href="/home.html">Back to Home</a></p>
+
+  <div id="message" class="error"></div>
+
+  <script>
+    const PRODUCT_PRICES = {
+      car: 100,
+      bike: 40,
+      bus: 150,
+      truck: 200
+    };
+
+    async function loadSession() {
+      const res = await fetch('/session');
+      const user = await res.json();
+      const el = document.getElementById('userInfo');
+      if (user && user.username) {
+        el.textContent = 'Logged in as: ' + user.username;
+      } else {
+        el.textContent = 'Not logged in';
+      }
+      return user;
+    }
+
+    async function loadCart() {
+      const msg = document.getElementById('message');
+      msg.textContent = '';
+      const container = document.getElementById('cartContainer');
+      container.textContent = 'Loading...';
+
+      const user = await loadSession();
+      if (!user || !user.user_id) {
+        msg.textContent = 'No user in session. Please login again.';
+        container.textContent = '';
+        return;
+      }
+
+      try {
+        // Call frontend proxy, which talks to API gateway /api/cart/{user_id}
+        const resp = await fetch('/cart-data');
+        if (!resp.ok) {
+          msg.textContent = 'Failed to load cart';
+          container.textContent = '';
+          return;
+        }
+        const data = await resp.json();
+        const items = data.items || [];
+
+        if (!items.length) {
+          container.textContent = 'Cart is empty';
+          document.getElementById('totalPrice').textContent = '';
+          return;
+        }
+
+        let html = '<ul>';
+        let total = 0;
+        items.forEach(it => {
+          const price = PRODUCT_PRICES[it.product_id] || 0;
+          const lineTotal = price * (it.quantity || 1);
+          total += lineTotal;
+          html += `<li>${it.product_id} x ${it.quantity} = $${lineTotal}</li>`;
+        });
+        html += '</ul>';
+        container.innerHTML = html;
+        document.getElementById('totalPrice').textContent = 'Total: $' + total;
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Error contacting server';
+        container.textContent = '';
+      }
+    }
+
+    loadCart();
+  </script>
+</body>
+</html>

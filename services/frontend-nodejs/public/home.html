@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Home - Simple Ecommerce</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; }
+    .product { border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; }
+    .error { color: #c00; }
+  </style>
+</head>
+<body>
+  <h1>Home</h1>
+  <div id="userInfo"></div>
+
+  <h2>Products</h2>
+  <div id="products"></div>
+
+  <p><a href="/cart.html">Go to Cart</a></p>
+  <div id="message" class="error"></div>
+
+  <script>
+    const PRODUCTS = [
+      { id: 'car',   name: 'Car',   price: 100 },
+      { id: 'bike',  name: 'Bike',  price: 40  },
+      { id: 'bus',   name: 'Bus',   price: 150 },
+      { id: 'truck', name: 'Truck', price: 200 }
+    ];
+
+    async function loadSession() {
+      const res = await fetch('/session');
+      const user = await res.json();
+      const el = document.getElementById('userInfo');
+      if (user && user.username) {
+        el.textContent = 'Logged in as: ' + user.username;
+      } else {
+        el.textContent = 'Not logged in';
+      }
+      return user;
+    }
+
+    async function addToCart(productId) {
+      const msg = document.getElementById('message');
+      msg.textContent = '';
+      try {
+        const resp = await fetch('/add-to-cart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product_id: productId })
+        });
+        if (!resp.ok) {
+          msg.textContent = 'Failed to add to cart';
+          return;
+        }
+        msg.textContent = 'Added to cart!';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Error contacting server';
+      }
+    }
+
+    function renderProducts() {
+      const container = document.getElementById('products');
+      PRODUCTS.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'product';
+        div.innerHTML = `
+          <strong>${p.name}</strong><br>
+          Price: $${p.price}<br>
+          <button>Add to Cart</button>
+        `;
+        const btn = div.querySelector('button');
+        btn.onclick = () => addToCart(p.id);
+        container.appendChild(div);
+      });
+    }
+
+    (async function init() {
+      await loadSession();
+      renderProducts();
+    })();
+  </script>
+</body>
+</html>

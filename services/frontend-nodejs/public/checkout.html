@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Checkout - Simple Ecommerce</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; }
+    .error { color: #c00; }
+  </style>
+</head>
+<body>
+  <h1>Checkout</h1>
+  <div id="userInfo"></div>
+
+  <p>Click the button below to place your order.</p>
+  <button id="checkoutBtn">Checkout</button>
+
+  <div id="message" class="error"></div>
+
+  <script>
+    async function loadSession() {
+      const res = await fetch('/session');
+      const user = await res.json();
+      const el = document.getElementById('userInfo');
+      if (user && user.username) {
+        el.textContent = 'Logged in as: ' + user.username;
+      } else {
+        el.textContent = 'Not logged in';
+      }
+      return user;
+    }
+
+    document.getElementById('checkoutBtn').onclick = async function () {
+      const msg = document.getElementById('message');
+      msg.textContent = '';
+
+      try {
+        const resp = await fetch('/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!resp.ok) {
+          msg.textContent = 'Checkout failed';
+          return;
+        }
+
+        const data = await resp.json();
+        console.log('Checkout result:', data);
+        window.location.href = '/success.html';
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'Error contacting server';
+      }
+    };
+
+    loadSession();
+  </script>
+</body>
+</html>

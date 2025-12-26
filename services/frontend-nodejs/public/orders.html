@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>My Orders</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    th { background: #f4f4f4; }
+    .error { color: red; margin-top: 1rem; }
+    .nav { margin-bottom: 1rem; }
+    .nav a { margin-right: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <a href="/home.html">Home</a>
+    <a href="/cart.html">Cart</a>
+    <a href="/orders.html">My Orders</a>
+  </div>
+
+  <h1>My Orders</h1>
+  <p id="user-info">Loading user...</p>
+  <div id="status"></div>
+
+  <table id="orders-table" style="display: none;">
+    <thead>
+      <tr>
+        <th>Order ID</th>
+        <th>Total</th>
+        <th>Items</th>
+      </tr>
+    </thead>
+    <tbody id="orders-body"></tbody>
+  </table>
+
+  <p class="error" id="error"></p>
+
+  <script>
+    async function loadUser() {
+      const resp = await fetch('/session');
+      const user = await resp.json();
+      if (!user) {
+        document.getElementById('user-info').innerText = 'Not logged in. Please login first.';
+        return null;
+      }
+      document.getElementById('user-info').innerText = 'Logged in as: ' + user.username + ' (user_id: ' + user.user_id + ')';
+      return user;
+    }
+
+    async function loadOrders() {
+      const user = await loadUser();
+      if (!user) {
+        document.getElementById('error').innerText = 'You must login before viewing orders.';
+        return;
+      }
+      try {
+        document.getElementById('status').innerText = 'Loading orders...';
+        const resp = await fetch('/orders-data');
+        if (!resp.ok) {
+          const text = await resp.text();
+          document.getElementById('error').innerText = 'Failed to load orders: ' + text;
+          document.getElementById('status').innerText = '';
+          return;
+        }
+        const data = await resp.json();
+
+        // We don't know the exact shape; try to handle common patterns
+        const orders = Array.isArray(data) ? data : (data.orders || []);
+        if (!orders.length) {
+          document.getElementById('status').innerText = 'No orders found.';
+          return;
+        }
+
+        const tbody = document.getElementById('orders-body');
+        tbody.innerHTML = '';
+        for (const order of orders) {
+          const tr = document.createElement('tr');
+          const id = order.order_id || order.id || '(no id)';
+          const total = order.total || order.amount || 0;
+          const items = order.items || order.products || [];
+          const itemsText = Array.isArray(items) ? items.map(i => i.product_id || i.name || JSON.stringify(i)).join(', ') : JSON.stringify(items);
+
+          tr.innerHTML = `
+            <td>${id}</td>
+            <td>${total}</td>
+            <td>${itemsText}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+
+        document.getElementById('orders-table').style.display = '';
+        document.getElementById('status').innerText = '';
+      } catch (err) {
+        document.getElementById('error').innerText = 'Error loading orders: ' + err;
+        document.getElementById('status').innerText = '';
+      }
+    }
+
+    loadOrders();
+  </script>
+</body>
+</html>
