@@ -75,3 +75,25 @@ The service responds with HTTP 401 and:
 ```json
 {"detail": "Invalid username or password"}
 ```
+
+## Docker image
+
+To build a Docker image for this service (from this directory):
+
+```bash
+docker build -t user-service-python .
+```
+
+Run the container locally, exposing port 8001:
+
+```bash
+docker run --rm -p 8001:8001 user-service-python
+```
+
+You can then call the same endpoints via `http://localhost:8001` from your host:
+
+```bash
+curl -X POST http://localhost:8001/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "alice", "password": "password1"}'
+```
